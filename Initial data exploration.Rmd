@@ -103,7 +103,18 @@ Load No retweets
 ```{r}
 setwd(DataFiles)
 TwitNoRetweets <- read.csv("twitter_noretweets_daily.csv", as.is = TRUE)
+symbology <- read.csv("symbology.csv")
 setwd(GraphicsFiles)
+```
+
+
+Merge exchanges into time series data
+```{r}
+
+Twit2 <- symbology %>% select(symbol,exchange) %>% 
+  inner_join(.,TwitNoRetweets, by = c("symbol" ="SYMBOL" ))
+
+
 ```
 
 
