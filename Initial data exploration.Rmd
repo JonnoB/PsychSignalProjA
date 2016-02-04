@@ -114,7 +114,20 @@ Merge exchanges into time series data
 Twit2 <- symbology %>% select(symbol,exchange) %>% 
   inner_join(.,TwitNoRetweets, by = c("symbol" ="SYMBOL" ))
 
+Twit2 %<>% group_by(exchange, TIMESTAMP_UTC) %>% summarise(BULL_SCORED_MESSAGES = sum(BULL_SCORED_MESSAGES))
 
+ggplot(Twit2 %>% filter(exchange == "NYSE") %>% head(21), 
+       aes(x=TIMESTAMP_UTC, y=BULL_SCORED_MESSAGES %>% log10, colour = exchange)) +
+  geom_line(aes(group=exchange)) +ggtitle("Visualising the Periodicity of the NYSE")
+
+
+NYSE <-Twit2 %>% filter(exchange == "NYSE")
+
+png("NYSE.png")
+acf(NYSE$BULL_SCORED_MESSAGES)
+dev.off()
+
+x <- decompose(NYSE$BULL_SCORED_MESSAGES)
 ```
 
 
