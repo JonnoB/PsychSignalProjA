@@ -9,7 +9,7 @@ The Goal of this document is to provide summary statistics for Milestone 1 of th
 
 
 ```{r}
-packages <- c("dplyr", "tidyr", "ggplot2", "caret", "corrplot", "xtable", "magrittr")
+packages <- c("dplyr", "tidyr", "ggplot2", "caret", "corrplot", "xtable", "magrittr", "zoo")
 sapply(packages, library, character.only = TRUE)
 
 
@@ -123,12 +123,149 @@ ggplot(Twit2 %>% filter(exchange == "NYSE") %>% head(21),
 
 NYSE <-Twit2 %>% filter(exchange == "NYSE")
 
-png("NYSE.png")
-acf(NYSE$BULL_SCORED_MESSAGES)
+png("acfNYSE.png")
+acf(NYSE$BULL_SCORED_MESSAGES) %>% plot(., main = "ACF of Bullish scored tweets from NYSE")
 dev.off()
 
-x <- decompose(NYSE$BULL_SCORED_MESSAGES)
+NYSEts <- NYSE[,2:3] %>% mutate(TIMESTAMP_UTC = as.Date(TIMESTAMP_UTC)) %>% zoo
+
+x <- ts(NYSE[1:200,3], frequency = 7 )
+decompNYSE <- decompose(x) 
+
+
+png("decompNYSE.png")
+decompNYSE %>% plot
+dev.off()                                
+
+#This doesn't work I don't know why
+decompNYSE <- stl(x)
+
+decompNYSEacf <- acf(decompNYSE$random, na.action = na.pass)
+
+#change the lag back onto day scale not fractions of the week, which are the period
+decompNYSEacf$lag <- decompNYSEacf$lag*7
+png("decompNYSEacf.png")
+plot(decompNYSEacf, main = "ACF of decomposed NYSE\n Bullish Tweets 200 day sample")
+dev.off()
+
 ```
+
+breakdown of company by exchange and sector
+
+I need to reorder factor levels from alpha to descending
+```{r}
+
+ExSectTab <- table(symbology$exchange, symbology$sector) %>% data.frame %>% 
+  rename(exchange = Var1, sector = Var2, symbols = Freq)
+
+
+ExSums<- table(symbology$exchange) %>% data.frame %>% arrange(-Freq) %>% mutate(Var1 = as.factor(Var1))
+
+SectSums<- table(symbology$sector) %>% data.frame %>% arrange(-Freq) %>% mutate(Var1 = as.factor(Var1))
+
+ExSectTab %<>% mutate( 
+  exchange = factor(ExSectTab$exchange, levels = ExSums$Var1[order(-ExSums$Freq)]), 
+  sector =  factor(ExSectTab$sector, levels = SectSums$Var1[order(-SectSums$Freq)]))
+
+ggplot(ExSectTab, aes(x= exchange, y = sector)) +geom_raster(aes(fill = symbols)) +
+  theme(axis.text.x = element_text( angle = 45))
+
+
+
+```
+
+
+
+breakdown of tweet volume by exchange and sector graph
+
+```{r}
+
+ExSectTwitTab <- symbology %>% select(symbol,exchange, sector) %>% 
+  inner_join(.,TwitNoRetweets, by = c("symbol" ="SYMBOL" )) %>% 
+  group_by(exchange, sector) %>% 
+  summarise(SumScanned = sum(TOTAL_SCANNED_MESSAGES)) %>% ungroup %>% 
+  mutate( sector = ifelse(sector =="","Misc",as.character(sector))) #unknown exchanges are not included here
+
+ExSectTwitTab2 <- ExSectTwitTab %>% spread(key = sector, value= SumScanned, fill = 0) %>%
+  gather(key= sector, value = SumScanned, -exchange)
+
+
+ExSums<- ExSectTwitTab2 %>% group_by(exchange) %>%summarise(SumScanned =sum(SumScanned)) %>%
+  arrange(-SumScanned) %>% 
+  mutate(exchange = factor(.$exchange, levels = .$exchange)
+    )
+
+SectSums<- ExSectTwitTab2 %>% group_by(sector) %>%summarise(SumScanned =sum(SumScanned)) %>%
+  arrange(-SumScanned)%>% 
+  mutate(sector = factor(.$sector, levels = .$sector)
+    )
+
+
+ExSectTwitTab2 %<>% mutate( 
+  exchange = factor(.$exchange, levels = ExSums$exchange), 
+  sector =  factor(.$sector, levels = SectSums$sector),
+  percent = SumScanned/sum(SumScanned))
+
+ggplot(ExSectTwitTab2, aes(x= exchange, y = sector)) +
+  geom_raster(aes(fill = log10(SumScanned+1))) +
+  theme(axis.text.x = element_text( angle = 45))
+
+ggplot(ExSectTwitTab2, aes(x= exchange, y = sector)) +
+  geom_raster(aes(fill = percent)) +
+  theme(axis.text.x = element_text( angle = 45),
+        axis.text.y = element_text( angle = 45)) + ggtitle("Percentage of tweets by Exchange and Sector")
+setwd(GraphicsFiles)
+ggsave("ExSectHeat.png")
+
+```
+
+The chunk below, tried to add marginal densities to the heat map but it didn't really work out.
+```{r}
+
+# 
+# blankPlot <- ggplot()+geom_blank(aes(1,1))+
+#   theme(
+#     plot.background = element_blank(), 
+#    panel.grid.major = element_blank(),
+#    panel.grid.minor = element_blank(), 
+#    panel.border = element_blank(),
+#    panel.background = element_blank(),
+#    axis.title.x = element_blank(),
+#    axis.title.y = element_blank(),
+#    axis.text.x = element_blank(), 
+#    axis.text.y = element_blank(),
+#    axis.ticks = element_blank(),
+#    axis.line = element_blank()
+#      )
+# 
+# 
+# explot <- ggplot(ExSums,aes(x=exchange, y = SumScanned/sum(SumScanned))) +
+#   geom_bar(stat ="identity")+ 
+#   theme(axis.ticks = element_blank(), axis.text.x = element_text( angle = 45))
+# sectplot <-ggplot(SectSums,aes(x=sector, y = SumScanned/sum(SumScanned))) +
+#   geom_bar(stat ="identity")+
+#   theme(axis.ticks = element_blank(), axis.text.y = element_text( angle = 45))  +
+#   coord_flip() 
+# 
+# 
+# x <- ggplot(ExSectTwitTab2, aes(x= exchange, y = sector)) +
+#   geom_raster(aes(fill = percent)) +
+#   theme(axis.text.x = element_blank(), 
+#         axis.text.y = element_blank(), 
+#         legend.position ="none",
+#         axis.title.x = element_blank(),
+#         axis.title.y = element_blank()) 
+# 
+# grid.arrange(sectplot, x,blankPlot , explot, 
+#         ncol=2, nrow=2, widths=c(1.4, 4), heights=c(4, 1.4))
+# 
+# p <- ggplot(ExSectTwitTab2, aes(x= as.numeric(exchange), y = as.numeric(sector))) +
+#   geom_raster(aes(fill = percent)) 
+# 
+# ggMarginal(p)
+
+```
+
 
 
 summary of each variable
@@ -268,7 +405,7 @@ twitscanvol <- symbology %>% select(symbol, all_scanned_2015_avg_monthly, exchan
   arrange(-year_2015) %>%
   mutate(cumtwits = cumsum(year_2015), CumPercTwit = cumtwits/sum(year_2015) ,CumPercRank = rownames(.) %>% as.integer %>% percent_rank)
 
-ggplot(twitscanvol, aes(x= CumPercRank, y = CumPercTwit, colour= exchange)) +geom_point()+ggtitle("Cumulative percent of tweets vs \n Cumulative rank of symbol")
+ggplot(twitscanvol, aes(x= CumPercRank, y = CumPercTwit, colour= exchange)) +geom_point()+ggtitle("Cumulative percent of tweets vs \n Cumulative rank of symbol") + xlab("Percentile rank ordered by decreasing frequency")
 ggsave("TweetVolCumLineplot.png")
 
 
@@ -300,6 +437,7 @@ xtable(criticalsymb, caption="Breakdown of 80\\% of the scanned tweet volume in 
 # ggplot(criticalsymb1, aes(x= CumPercSymb, y = CumPercTwit)) +geom_line()+ggtitle("Cumulative percent of tweets vs \n Cumulative rank of exchange for top 80% of data")
 
 ```
+
 
 
 Plot the percentage of dataset volume by stock twits, twitter month data per year

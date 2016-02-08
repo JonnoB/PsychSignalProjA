@@ -1,0 +1,69 @@
+---
+title: "Retweet Manipulation"
+author: "Jonathan Bourne"
+date: "6 February 2016"
+output: html_document
+---
+
+
+```{r}
+packages <- c("dplyr", "tidyr", "ggplot2", "caret", "corrplot", "xtable", "magrittr", "zoo", "igraph")
+sapply(packages, library, character.only = TRUE)
+
+
+basewd <- "C:/Users/Jonno/Dropbox/Data_Analytics" #change this to your dropbox file path for data analytics
+DataFiles <- file.path(basewd, "Data")
+GraphicsFiles <- file.path(basewd, "Graphics", "Milestone1")
+
+```
+
+
+
+```{r}
+setwd(DataFiles)
+TwitRetweets <- read.csv(gzfile("twitter_withretweets_daily.csv.gz"), as.is = TRUE)
+symbology <- read.csv("symbology.csv")
+setwd(GraphicsFiles)
+```
+
+
+
+Load reshape the twitter data into wide form,remove variables of near zero variance. Save as csv
+```{r}
+TwitBull <- TwitRetweets %>% select(SYMBOL, TIMESTAMP_UTC, BULLISH_INTENSITY) %>% 
+  spread(key = SYMBOL, value = BULLISH_INTENSITY, fill = 0) 
+setwd(DataFiles)
+x1 <-nearZeroVar(TwitBull)
+TwitBullvar <- TwitBull[,-x1]
+write.csv(TwitBull, file = "TwitBullWide.csv")
+```
+
+
+create an adjacency matrix based on corellation with cutoff at x. output adjacency csv, and produce figure showing the number of edges in the graph for a given cut off point.
+```{r}
+cortest <- cor(TwitBullvar[,-1])
+
+adj <- ifelse(cortest >0.45,1,0)
+adj2 <- graph.adjacency(adj, mode = "undirected", diag = FALSE)
+adj3 <- get.data.frame(adj2) %>%
+  rename( Source = from, Target = to) %>% mutate(Type = "Undirected", ID = "Source")
+
+setwd(DataFiles)
+write.csv(adj3, file = "Cor50AdjMat.csv")
+
+
+edges <- sapply(seq(from =0, to = .99, by = 0.01), function(n) {
+
+  ((ifelse(cortest >n,1,0) %>% sum) -nrow(cortest))/2
+  }
+)
+
+edgedat <- data.frame(percentage =seq(from =0, to = .99, by = 0.01), edge = edges )
+
+ggplot(edgedat, aes(x= percentage, y = log10(edges+1))) + geom_line() + 
+  ggtitle("Log plot of number of edges on an adjacency matrix\n against corellation cutoff") +
+  theme(axis.title.y = element_text("Log10 Connections"))
+setwd(GraphicsFiles)
+ggsave("NumberOfEdges.png")
+```
+
