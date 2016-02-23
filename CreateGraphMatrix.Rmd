@@ -1,0 +1,79 @@
+---
+title: "Retweets Absolute Bulllisness Adjacency"
+author: "Jonathan Bourne"
+date: "23 February 2016"
+output: html_document
+---
+
+
+```{r}
+packages <- c("dplyr", "tidyr", "ggplot2", "caret", "corrplot", "xtable", "magrittr", "zoo", "igraph")
+sapply(packages, library, character.only = TRUE)
+
+
+basewd <- "C:/Users/Jonno/Dropbox/Data_Analytics" #change this to your dropbox file path for data analytics
+DataFiles <- file.path(basewd, "Data")
+GraphicsFiles <- file.path(basewd, "Graphics", "Milestone2")
+
+```
+
+
+Import data
+```{r}
+setwd(DataFiles)
+TwitRetweets <- read.csv(gzfile("twitter_withretweets_daily.csv.gz"), as.is = TRUE)
+symbology <- read.csv("symbology.csv")
+setwd(GraphicsFiles)
+```
+
+#Data Preparation
+
+Reshape the twitter data into wide form, remove weekends and holidays?
+```{r}
+TwitBull <- TwitRetweets %>% select(SYMBOL, TIMESTAMP_UTC, BULLISH_INTENSITY) %>% 
+  spread(key = SYMBOL, value = BULLISH_INTENSITY, fill = 0) #change metric
+setwd(DataFiles)
+
+```
+
+
+Remove variables of near zero variance. Save as csv
+```{r}
+x1 <-nearZeroVar(TwitBull)
+TwitBullvar <- TwitBull[,-x1]
+#write.csv(TwitBull, file = "TwitBullWide.csv") #save under new type with correct metric
+
+```
+
+
+Seperate into time periods and create a single test time period
+```{r}
+
+```
+
+Decompose to enforce stationarity in each timeseries, this will create a large list of decomposed data
+```{r}
+
+```
+
+Create distance matrix
+```{r}
+
+```
+
+Create Adjacency matrix 
+```{r}
+
+```
+
+Merge Distance and Adjacency matrices to create a weighted undirected graph
+```{r}
+
+```
+
+Structure graph for use in gephi with as much metadata as possible
+symbol, cluster ID, edge type (aka inter cluster vs intra cluster), is target symbol/node yesy/no etc
+```{r}
+
+```
+
