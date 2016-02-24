@@ -7,7 +7,7 @@ output: html_document
 
 
 ```{r}
-packages <- c("dplyr", "tidyr", "ggplot2", "caret", "corrplot", "xtable", "magrittr", "zoo", "igraph", "rgefx")
+packages <- c("dplyr", "tidyr", "ggplot2", "caret", "corrplot", "xtable", "magrittr", "zoo", "igraph", "rgefx", "MCL")
 sapply(packages, library, character.only = TRUE)
 
 
@@ -30,8 +30,8 @@ setwd(GraphicsFiles)
 
 Reshape the twitter data into wide form, remove weekends and holidays?
 ```{r}
-TwitBull <- TwitRetweets %>% select(SYMBOL, TIMESTAMP_UTC, BULL_SCORED_MESSAGES) %>% 
-  spread(key = SYMBOL, value = BULL_SCORED_MESSAGES, fill = 0) #change metric
+TwitBull <- TwitRetweets %>% select(SYMBOL, TIMESTAMP_UTC, BULLISH_INTENSITY) %>% 
+  spread(key = SYMBOL, value = BULLISH_INTENSITY, fill = 0) #change metric
 setwd(DataFiles)
 
 ```
@@ -39,10 +39,18 @@ setwd(DataFiles)
 
 Remove variables of near zero variance. Save as csv
 ```{r}
-x1 <-nearZeroVar(TwitBull)
-TwitBullvar <- TwitBull[,-x1]
+
+#remove symbols with less than 5/7% 
+viable <- colSums(TwitBull>0) / nrow(TwitBull) > 5/7
+sum(viable)
+
+TwitBullvar <- TwitBull[,viable]
+
 TwitBullvar %<>% mutate(TIMESTAMP_UTC = as.Date(TIMESTAMP_UTC))
 
+#Histogram of the distriubution of tweet intensity for the selected symbols
+x <- TwitBullvar %>% gather(key = symbol, value = tweets, -TIMESTAMP_UTC)
+histogram(x$tweets)
 #write.csv(TwitBull, file = "TwitBullWide.csv") #save under new type with correct metric
 
 ```
@@ -55,7 +63,9 @@ periodID <- rep(1:ceiling(nrow(TwitBullvar)/60), length.out = nrow(TwitBullvar),
 testeriod <- 27
 
 data <- TwitBullvar[periodID == testeriod,]
-DataZeroVar <- nearZeroVar(data)
+
+#DataZeroVar <- nearZeroVar(data)
+#data <- data[,-DataZeroVar]
 ```
 
 Decompose to enforce stationarity in each timeseries, this will create a large list of decomposed data. Also create a matrix/matrices of the decomposed data.
@@ -72,7 +82,7 @@ We didn't remove the trend because over a two month period there is not enough t
 
 Create distance and significance matrices
 ```{r}
-corlist <- data2[,2:ncol(data2)] %>% as.matrix %>% rcorr
+corlist <- data[,2:ncol(data)] %>% as.matrix %>% rcorr
 distmat <- sqrt(2*(1-corlist[[1]]))
 
 #number of links for given significance value
@@ -83,19 +93,80 @@ cutoff$edges <- sapply(cutoff$cutoff ,function(n) {
   })
 
 ggplot(cutoff, aes(x= cutoff, y= edges)) + geom_line() +ggtitle("Edges decreast Linearly with increaing cutoff point")
+
+
 ```
 
 Merge Distance and Adjacency matrices to create a weighted undirected graph
 ```{r}
-MNet <- distmat*(corlist[[3]]>0.95) #weighted undirected adjacency matrix
+
+sigmat <- corlist[[3]]>0.75
+MNet <- distmat*sigmat #weighted undirected adjacency matrix
+write.csv(MNet, "MNet.csv")
+
+plot(density(rowSums(sigmat, na.rm = TRUE))) #thedistribution  of number of node connection  
+
+plot(density(MNet, na.rm = TRUE))
+
 MNet <- graph.adjacency(MNet, mode = "undirected", weighted = TRUE, diag = FALSE)
 
-fc <- fastgreedy.community(MNet)
+com1 <- fastgreedy.community(MNet)
+com2 <- cluster_walktrap(MNet)
+com3 <- cluster_spinglass(MNet)
+com4 <- cluster_edge_betweenness(MNet)
+com5 <- mcl(x = MNet, addLoops=TRUE, ESM = TRUE)
 
 ```
+
+Create a table for the time period with the metric for each day and the cluster ID
+```{r}
+symclust <- data.frame(SYMBOL = names(data)[-1], ClusterID = com5$Cluster)
+Twitaggmat <- TwitRetweets %>% select(SYMBOL, TIMESTAMP_UTC, BULLISH_INTENSITY) %>% 
+  inner_join(., symclust, "SYMBOL")
+
+write.csv(Twitaggmat, "Twitaggmat.csv")
+```
+
+
+function to create list of each period
+```{r}
+
+
+```
+
 
 Structure graph for use in gephi with as much metadata as possible
 symbol, cluster ID, edge type (aka inter cluster vs intra cluster), is target symbol/node yesy/no etc
 ```{r}
+
+NumPeriods <- 1:ceiling(nrow(TwitBullvar)/60)
+
+TwitMatList <- lapply(NumPeriods, function(n) {
+
+  data = TwitBullvar[periodID == n,]
+  remove = nearZeroVar(data)
+  if(length(remove) >0){
+  data = data[,-remove]
+  }
+  corlist = data[,2:ncol(data)] %>% as.matrix %>% rcorr
+  distmat = sqrt(2*(1-corlist[[1]]))
+  sigmat = corlist[[3]]>0.75
+  MNet = distmat*sigmat #weighted undirected adjacency matrix
+  #MNet = graph.adjacency(MNet, mode = "undirected", weighted = TRUE, diag = FALSE)#do not use if clustering with mcl
+  com5 = mcl(x = MNet, addLoops=TRUE, ESM = TRUE)
+  symclust = data.frame(SYMBOL = names(data)[-1], ClusterID = com5$Cluster)
+  Twitaggmat = TwitRetweets %>% select(SYMBOL, TIMESTAMP_UTC, BULLISH_INTENSITY) %>% 
+    inner_join(., symclust, "SYMBOL")
+  print(n)
+  Twitaggmat
+  
+  }
+)
+
+setwd(file.path(DataFiles, "TweetMatPeriods"))
+lapply(3:32, function(n) {
+      write.csv(TwitMatList[[n]], paste("Twitmat_Period",n, ".csv", sep="") )
+  print(n)
+})
 
 ```
