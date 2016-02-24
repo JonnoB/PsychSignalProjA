@@ -1,0 +1,164 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "not found\n"
+     ]
+    }
+   ],
+   "source": [
+    "import Quandl as q\n",
+    "for sym in tickers:   \n",
+    "    try:\n",
+    "        tmp=q.get(\"WIKI/\"+sym+\".11\",start='2010-01-01', end='2016-01-01', transformation='rdiff')\n",
+    "        tmp.columns=sym\n",
+    "    except:\n",
+    "        nan=np.ndarray(shape=(2192,1))\n",
+    "        nan.fill(np.NaN)\n",
+    "        tmp=pd.DataFrame({sym:nan})\n",
+    "    rdata=pd.concat(rdata,tmp,axis=1)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>a</th>\n",
+       "      <th>b</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>0</th>\n",
+       "      <td>aa</td>\n",
+       "      <td>1</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>1</th>\n",
+       "      <td>bb</td>\n",
+       "      <td>2</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "    a  b\n",
+       "0  aa  1\n",
+       "1  bb  2"
+      ]
+     },
+     "execution_count": 13,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "import pandas as pd\n",
+    "df=pd.DataFrame({'':['aa','bb'],'b':[1,2]})\n",
+    "df"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 20,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "DatetimeIndex(['2010-01-01', '2010-01-02', '2010-01-03', '2010-01-04',\n",
+       "               '2010-01-05', '2010-01-06', '2010-01-07', '2010-01-08',\n",
+       "               '2010-01-09', '2010-01-10',\n",
+       "               ...\n",
+       "               '2015-12-23', '2015-12-24', '2015-12-25', '2015-12-26',\n",
+       "               '2015-12-27', '2015-12-28', '2015-12-29', '2015-12-30',\n",
+       "               '2015-12-31', '2016-01-01'],\n",
+       "              dtype='datetime64[ns]', length=2192, freq='D')"
+      ]
+     },
+     "execution_count": 20,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "tmp=pd.DataFrame({'a':[]})\n",
+    "pd.merge(df,tmp,on='a',how='left')\n",
+    "pd.date_range(start='2010-01-01',end='2016-01-01')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 31,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "array([[ nan],\n",
+       "       [ nan],\n",
+       "       [ nan],\n",
+       "       ..., \n",
+       "       [ nan],\n",
+       "       [ nan],\n",
+       "       [ nan]])"
+      ]
+     },
+     "execution_count": 31,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "import numpy as np\n",
+    "\n"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.5.1"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 0
+}
