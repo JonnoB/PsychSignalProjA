@@ -7,7 +7,7 @@ output: html_document
 
 
 ```{r}
-packages <- c("dplyr", "tidyr", "ggplot2", "caret", "corrplot", "xtable", "magrittr", "zoo", "igraph", "rgefx", "MCL", "Hmisc")
+packages <- c("dplyr", "tidyr", "ggplot2", "caret", "corrplot", "xtable", "magrittr", "zoo", "igraph", "rgefx", "MCL", "Hmisc", "gridExtra")
 sapply(packages, library, character.only = TRUE)
 
 
@@ -36,21 +36,39 @@ setwd(DataFiles)
 
 ```
 
-
-Remove variables of near zero variance. Save as csv
+make a histogram of zero entries after no preprocessing, removing near zero, removing less than 70% full
 ```{r}
 
+NoPreProcTwit <- TwitBull %>% gather(key = symbol, value = tweets, -TIMESTAMP_UTC)
+NearZeroTwit <- TwitBull[,-nearZeroVar(TwitBull)] %>% gather(key = symbol, value = tweets, -TIMESTAMP_UTC)
 #remove symbols with less than 5/7% 
 viable <- colSums(TwitBull>0) / nrow(TwitBull) > 5/7
-sum(viable)
+HighFillTwit <- TwitBull[,viable] %>% gather(key = symbol, value = tweets, -TIMESTAMP_UTC)
+
+
+NoPreProcplot <- ggplot(NoPreProcTwit, aes(tweets, ..density..)) + 
+  geom_histogram(bins = 20)+ggtitle("No PreProcessing")
+
+NearZeroplot <- ggplot(NearZeroTwit, aes(tweets, ..density..)) + 
+  geom_histogram(bins = 20) +ggtitle("Near Zero Removed")
+
+HighFillplot <- ggplot(HighFillTwit, aes(tweets,..density..)) + 
+  geom_histogram(bins = 20) +ggtitle("Remove Less than 70% Fill")
+
+setwd(GraphicsFiles)
+gridfig <- grid.arrange(NoPreProcplot, NearZeroplot, HighFillplot, nrow= 1)
+ggsave("ZerosDensity.png", gridfig, width = 8, height = 5.25)
+
+rm("NoPreProcTwit","NearZeroTwit", "HighFillTwit", "NoPreProcplot","NearZeroplot","HighFillplot", "gridfig")
+
+```
+
+
+Remove variables which have less than 70% of rows with values in. Save as csv
+```{r}
 
 TwitBullvar <- TwitBull[,viable]
-
 TwitBullvar %<>% mutate(TIMESTAMP_UTC = as.Date(TIMESTAMP_UTC))
-
-#Histogram of the distriubution of tweet intensity for the selected symbols
-x <- TwitBullvar %>% gather(key = symbol, value = tweets, -TIMESTAMP_UTC)
-histogram(x$tweets)
 #write.csv(TwitBull, file = "TwitBullWide.csv") #save under new type with correct metric
 
 ```
@@ -59,9 +77,7 @@ histogram(x$tweets)
 Seperate into time periods and create a single test time period
 ```{r}
 periodID <- rep(1:ceiling(nrow(TwitBullvar)/60), length.out = nrow(TwitBullvar), each = 60)
-
 testperiod <- 27
-
 data <- TwitBullvar[periodID == testperiod,]
 
 #DataZeroVar <- nearZeroVar(data)
@@ -92,8 +108,8 @@ cutoff$edges <- sapply(cutoff$cutoff ,function(n) {
   sum(corlist[[3]]>n, na.rm = TRUE)/2
   })
 
-ggplot(cutoff, aes(x= cutoff, y= edges)) + geom_line() +ggtitle("Edges decreast Linearly with increaing cutoff point")
-
+ggplot(cutoff, aes(x= cutoff, y= edges)) + geom_line() +ggtitle("Edge Number is inversely proportional to cut off point") +xlab("Cut Off") +ylab(" Number of Edges")
+ggsave("Edgenumber.png")
 
 ```
 
@@ -104,19 +120,37 @@ sigmat <- corlist[[3]]>0.75
 MNet <- distmat*sigmat #weighted undirected adjacency matrix
 write.csv(MNet, "MNet.csv")
 
-plot(density(rowSums(sigmat, na.rm = TRUE))) #thedistribution  of number of node connection  
+histogram(density(MNet, na.rm = TRUE))
 
-plot(density(MNet, na.rm = TRUE))
+x <- MNet %>% data.frame %>% gather(key = SYMBOL, value = distance) %>% 
+  filter( distance = !is.na(distance))
 
+setwd(GraphicsFiles)
+ggplot(x,aes(x= distance, ..density..)) +geom_histogram(binwidth = 0.05) +ggtitle("Distribution of distances")
+ggsave("Distancedistrib.png")
+
+#the distribution  of number of node connection  
+Kdist <- data.frame(K = rowSums(sigmat, na.rm = TRUE) )
+ggplot(Kdist, aes(K, ..density..)) + 
+  geom_histogram(bins = 20) +ggtitle("Distriution of Node Degree")+xlab("Number of edges")
+ggsave("Kdistrib.png")
+
+```
+
+Run Various Clustering Algorithms
+```{r}
+
+MNet2 <- MNet #MCL doesn't use igraph structures
 MNet <- graph.adjacency(MNet, mode = "undirected", weighted = TRUE, diag = FALSE)
 
 com1 <- fastgreedy.community(MNet)
 com2 <- cluster_walktrap(MNet)
 com3 <- cluster_spinglass(MNet)
 com4 <- cluster_edge_betweenness(MNet)
-com5 <- mcl(x = MNet, addLoops=TRUE, ESM = TRUE)
+com5 <- mcl(x = MNet2, addLoops=TRUE, ESM = TRUE)
 
 ```
+
 
 Create a table for the time period with the metric for each day and the cluster ID
 ```{r}
@@ -147,7 +181,7 @@ TwitMatList <- lapply(NumPeriods, function(n) {
   sigmat = corlist[[3]]>0.75
   MNet = distmat*sigmat #weighted undirected adjacency matrix
   #MNet = graph.adjacency(MNet, mode = "undirected", weighted = TRUE, diag = FALSE)#do not use if clustering with mcl
-  com5 = mcl(x = MNet, addLoops=TRUE, ESM = TRUE)
+  com5 = mcl(x = MNet, addLoops=TRUE, ESM = FALSE)
   symclust = data.frame(SYMBOL = names(data)[-1], ClusterID = com5$Cluster)
   Twitaggmat = TwitRetweets %>% select(SYMBOL, TIMESTAMP_UTC, BULLISH_INTENSITY) %>% 
     inner_join(., symclust, "SYMBOL")
@@ -158,13 +192,13 @@ TwitMatList <- lapply(NumPeriods, function(n) {
 )
 
 # saveRDS(TwitMatList, "TwitMatList.rds")
-# 
+# TwitMatList <-readRDS("TwitMatList.rds")
 # setwd(file.path(DataFiles, "TweetMatPeriods"))
 # lapply(3:32, function(n) {
 #       write.csv(TwitMatList[[n]], paste("Twitmat_Period",n, ".csv", sep="") )
 #   print(n)
 # })
-
+TwitMatList <- TwitMatAgg
 ```
 
 Aggregate list into unweighted time periods and combine into single dataframe
@@ -179,7 +213,11 @@ x <- TwitMatList[[m]] %>% group_by(ClusterID) %>% summarise(mean = mean(BULLISH_
 )
 TwitMatAgg <- rbind_all(TwitMatAgg)
 
-
+m <- 14
+x <- TwitMatList[[m]] %>% group_by(ClusterID) %>% summarise(mean = mean(BULLISH_INTENSITY)) %>% ungroup
+ x2 <- TwitMatList[[m]] %>% group_by(SYMBOL) %>% 
+   summarise(ClusterID = first(ClusterID)) %>% left_join(., x, by = "ClusterID") %>%
+   mutate(PeriodID = m)
 
 ```
 
@@ -190,6 +228,9 @@ target <-  TwitMatAgg$SYMBOL %in% c("YHOO", "AAPL", "AIG", "COMPQ","EBAY","GOLD"
  
 ggplot(TwitMatAgg[target,], aes(x= PeriodID, y = mean, colour = SYMBOL)) + geom_line() +
   ggtitle("Comparing Unweighted Social INdex behaviour across time") + ylab("Mean BUllish Intensity") +xlab("Period Number")
+
+ggplot(TwitMatAgg, aes(x= PeriodID, y = mean, colour = SYMBOL)) + geom_line() +
+  ggtitle("Comparing Unweighted Social INdex behaviour across time") + ylab("Mean BUllish Intensity") +xlab("Period Number") +theme(legend.position = "none")
 ```
 
 
