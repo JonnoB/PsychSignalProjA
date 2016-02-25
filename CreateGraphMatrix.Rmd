@@ -7,7 +7,7 @@ output: html_document
 
 
 ```{r}
-packages <- c("dplyr", "tidyr", "ggplot2", "caret", "corrplot", "xtable", "magrittr", "zoo", "igraph", "rgefx", "MCL")
+packages <- c("dplyr", "tidyr", "ggplot2", "caret", "corrplot", "xtable", "magrittr", "zoo", "igraph", "rgefx", "MCL", "Hmisc")
 sapply(packages, library, character.only = TRUE)
 
 
@@ -60,9 +60,9 @@ Seperate into time periods and create a single test time period
 ```{r}
 periodID <- rep(1:ceiling(nrow(TwitBullvar)/60), length.out = nrow(TwitBullvar), each = 60)
 
-testeriod <- 27
+testperiod <- 27
 
-data <- TwitBullvar[periodID == testeriod,]
+data <- TwitBullvar[periodID == testperiod,]
 
 #DataZeroVar <- nearZeroVar(data)
 #data <- data[,-DataZeroVar]
@@ -128,18 +128,12 @@ write.csv(Twitaggmat, "Twitaggmat.csv")
 ```
 
 
-function to create list of each period
-```{r}
-
-
-```
-
-
-Structure graph for use in gephi with as much metadata as possible
-symbol, cluster ID, edge type (aka inter cluster vs intra cluster), is target symbol/node yesy/no etc
+Function to create list of each period
 ```{r}
 
 NumPeriods <- 1:ceiling(nrow(TwitBullvar)/60)
+periodID <- rep(1:ceiling(nrow(TwitBullvar)/60), length.out = nrow(TwitBullvar), each = 60)
+
 
 TwitMatList <- lapply(NumPeriods, function(n) {
 
@@ -163,10 +157,45 @@ TwitMatList <- lapply(NumPeriods, function(n) {
   }
 )
 
-setwd(file.path(DataFiles, "TweetMatPeriods"))
-lapply(3:32, function(n) {
-      write.csv(TwitMatList[[n]], paste("Twitmat_Period",n, ".csv", sep="") )
-  print(n)
-})
+# saveRDS(TwitMatList, "TwitMatList.rds")
+# 
+# setwd(file.path(DataFiles, "TweetMatPeriods"))
+# lapply(3:32, function(n) {
+#       write.csv(TwitMatList[[n]], paste("Twitmat_Period",n, ".csv", sep="") )
+#   print(n)
+# })
 
 ```
+
+Aggregate list into unweighted time periods and combine into single dataframe
+```{r}
+TwitMatAgg<- lapply(1:length(TwitMatList), function(m) {
+  
+x <- TwitMatList[[m]] %>% group_by(ClusterID) %>% summarise(mean = mean(BULLISH_INTENSITY)) %>% ungroup
+ x2 <- TwitMatList[[m]] %>% group_by(SYMBOL) %>% 
+   summarise(ClusterID = first(ClusterID)) %>% left_join(., x, by = "ClusterID") %>%
+   mutate(PeriodID = m)
+}
+)
+TwitMatAgg <- rbind_all(TwitMatAgg)
+
+
+
+```
+
+Plot unweighted Social Index across periods
+```{r}
+
+target <-  TwitMatAgg$SYMBOL %in% c("YHOO", "AAPL", "AIG", "COMPQ","EBAY","GOLD", "GOOG", "MSFT", "USD")
+ 
+ggplot(TwitMatAgg[target,], aes(x= PeriodID, y = mean, colour = SYMBOL)) + geom_line() +
+  ggtitle("Comparing Unweighted Social INdex behaviour across time") + ylab("Mean BUllish Intensity") +xlab("Period Number")
+```
+
+
+Structure graph for use in gephi with as much metadata as possible
+symbol, cluster ID, edge type (aka inter cluster vs intra cluster), is target symbol/node yesy/no etc
+```{r}
+
+```
+
