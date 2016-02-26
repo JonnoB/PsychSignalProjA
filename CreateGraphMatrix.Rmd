@@ -166,46 +166,6 @@ write.csv(Twitaggmat, "Twitaggmat.csv")
 ```
 
 
-Function to create list of each period
-```{r}
-
-NumPeriods <- 1:ceiling(nrow(TwitBullvar)/60)
-periodID <- rep(1:ceiling(nrow(TwitBullvar)/60), length.out = nrow(TwitBullvar), each = 60)
-
-
-TwitMatList <- lapply(NumPeriods, function(n) {
-
-  data = TwitBullvar[periodID == n,]
-  remove = nearZeroVar(data)
-  if(length(remove) >0){
-  data = data[,-remove]
-  }
-  corlist = data[,2:ncol(data)] %>% as.matrix %>% rcorr
-  distmat = sqrt(2*(1-corlist[[1]]))
-  sigmat = corlist[[3]]>0.75
-  MNet = distmat*sigmat #weighted undirected adjacency matrix
-  #MNet = graph.adjacency(MNet, mode = "undirected", weighted = TRUE, diag = FALSE)#do not use if clustering with mcl
-  com5 = mcl(x = MNet, addLoops=TRUE, ESM = FALSE)
-  symclust = data.frame(SYMBOL = names(data)[-1], ClusterID = com5$Cluster)
-  Twitaggmat = TwitRetweets %>% select(SYMBOL, TIMESTAMP_UTC, Metric) %>% 
-    inner_join(., symclust, "SYMBOL")
-  print(n)
-  Twitaggmat
-  
-  }
-)
-
-# saveRDS(TwitMatList, "TwitMatList.rds")
-# TwitMatList <-readRDS("TwitMatList.rds")
-# setwd(file.path(DataFiles, "TweetMatPeriods"))
-# lapply(3:32, function(n) {
-#       write.csv(TwitMatList[[n]], paste("Twitmat_Period",n, ".csv", sep="") )
-#   print(n)
-# })
-TwitMatList <- TwitMatAgg
-```
-
-
 ```{r}
 TwitMatList <-function(TweetDataRaw, Metric = "BULLISH_INTENSITY"){
   TwitBull = TweetDataRaw %>% select_("SYMBOL", "TIMESTAMP_UTC", Metric) %>% 
@@ -307,10 +267,21 @@ Extract number of clusters period
 
 x <- sapply(1:5, function(n){
   x <- MetricList[[n]] %>% group_by(PeriodID) %>% 
-    summarise(TotalClusters = length(unique(ClusterID))) %>% ungroup %>%select(TotalClusters)
-  }
+    summarise(TotalClusters = length(unique(ClusterID))) %>% ungroup %>%
+    select(TotalClusters) 
+    names(x) <- names(MetricList[n])
+    x
+    }
 )
 
+ClusterPeriod <- do.call(cbind, x) %>% as.data.frame %>% mutate(PeriodID = 1:nrow(.)) %>%
+  gather(key = Metric, value=Clusters, -PeriodID)
+
+setwd(GraphicsFiles)
+ggplot(ClusterPeriod, aes(x= PeriodID, y= Clusters, colour = Metric)) + geom_line() +
+  ggtitle("Total Number of Clusters per Metric") + 
+  theme(legend.title= "left", legend.position = "bottom")
+ggsave("ClusterNumbers.png", width = 911/3, height = 512/3, units ="mm" )
 ```
 
 
