@@ -7,7 +7,7 @@ output: html_document
 
 
 ```{r}
-packages <- c("dplyr", "tidyr", "ggplot2", "caret", "corrplot", "xtable", "magrittr", "zoo", "igraph", "rgexf", "MCL", "Hmisc", "gridExtra")
+packages <- c("dplyr", "tidyr", "ggplot2", "caret", "corrplot", "xtable", "magrittr", "zoo", "igraph", "rgexf", "MCL", "Hmisc", "gridExtra", "Quandl", "xtable")
 sapply(packages, library, character.only = TRUE)
 
 
@@ -31,7 +31,7 @@ setwd(GraphicsFiles)
 Reshape the twitter data into wide form, remove weekends and holidays?
 ```{r}
 
-Metric <- "TOTAL_SCANNED_MESSAGES"
+Metric <- "BEARISH_INTENSITY"
 
 TwitBull <- TwitRetweets %>% select_("SYMBOL", "TIMESTAMP_UTC", Metric) %>% 
   rename_("Metric" = Metric) %>% 
@@ -57,7 +57,7 @@ NearZeroplot <- ggplot(NearZeroTwit, aes(tweets, ..density..)) +
   geom_histogram(bins = 20) +ggtitle("Near Zero Removed")
 
 HighFillplot <- ggplot(HighFillTwit, aes(tweets,..density..)) + 
-  geom_histogram(bins = 20) +ggtitle("Remove Less than 70% Fill")
+  geom_histogram(bins = 20) +ggtitle("At least 70% Fill")
 
 setwd(GraphicsFiles)
 gridfig <- grid.arrange(NoPreProcplot, NearZeroplot, HighFillplot, nrow= 1)
@@ -165,18 +165,19 @@ Twitaggmat <- TwitRetweets %>% select(SYMBOL, TIMESTAMP_UTC, Metric) %>%
 write.csv(Twitaggmat, "Twitaggmat.csv")
 ```
 
-
+The function required to create the twitter matrix list
 ```{r}
 TwitMatList <-function(TweetDataRaw, Metric = "BULLISH_INTENSITY"){
   TwitBull = TweetDataRaw %>% select_("SYMBOL", "TIMESTAMP_UTC", Metric) %>% 
     rename_("Metric" = Metric) %>% 
-    spread(key = SYMBOL, value = Metric, fill = 0) #change metric
+    spread(key = SYMBOL, value = Metric, fill = 0) %>% 
+    mutate(TIMESTAMP_UTC = as.Date(TIMESTAMP_UTC))
   
   print("Metric select data set reshaped")
   
   viable = colSums(TwitBull>0) / nrow(TwitBull) > 5/7
   TwitBullvar = TwitBull[,viable]
-  TwitBullvar %<>% mutate(TIMESTAMP_UTC = as.Date(TIMESTAMP_UTC))
+  TwitBullvar %<>%  filter(TIMESTAMP_UTC > as.Date("2010-12-31"),TIMESTAMP_UTC < as.Date("2016-01-01") )
   
   print("Non-Viable symbols removed")
   
@@ -255,6 +256,12 @@ x <- Aggregator(Score, Metric = names(TwitRetweets)[z])
 }
                      )
 names(MetricList) <-names(TwitRetweets)[c(4:5,7:9)]
+setwd(DataFiles)
+saveRDS(MetricList, "MetricList.rds")
+
+
+setwd(GraphicsFiles)
+
 n <-2
 ggplot(MetricList[[n]], aes(x= PeriodID, y = mean, colour = SYMBOL)) + geom_line() +
   ggtitle("Comparing Unweighted Social Index behaviour across time") +xlab("Period Number")+ 
@@ -287,16 +294,63 @@ ggsave("ClusterNumbers.png", width = 911/3, height = 512/3, units ="mm" )
 
 Plot unweighted Social Index across periods
 ```{r}
+metric <- names(TwitRetweets)[5]
 
-target <-  TwitMatAgg$SYMBOL %in% c("YHOO", "AAPL", "AIG", "COMPQ","EBAY","GOLD", "GOOG", "MSFT", "USD")
+Bullscore <- TwitMatList(TwitRetweets, Metric = metric )
+x <- Aggregator(Bullscore, Metric = metric)
+
+
+target <-  x$SYMBOL %in% c("AXP", "AAPL", "CSCO", "IBM", "INTC", "JNJ", "JPM", "MSFT", "NKE", "V", "DIS")
  
-ggplot(TwitMatAgg[target,], aes(x= PeriodID, y = mean, colour = SYMBOL)) + geom_line() +
-  ggtitle("Comparing Unweighted Social INdex behaviour across time") + ylab("Mean BUllish Intensity") +xlab("Period Number")
+ggplot(x[target,], aes(x= PeriodID, y = mean, colour = SYMBOL)) + geom_line() +
+  ggtitle("Comparing Unweighted Social Index behaviour across time") + ylab(paste("Mean",names(TwitRetweets)[5])) +xlab("Period Number")
 
-ggplot(TwitMatAgg, aes(x= PeriodID, y = mean, colour = SYMBOL)) + geom_line() +
-  ggtitle("Comparing Unweighted Social Index behaviour across time") + ylab("Mean Bullish Intensity") +xlab("Period Number") +theme(legend.position = "none")
+ggplot(x, aes(x= PeriodID, y = mean, colour = SYMBOL)) + geom_line() +
+  ggtitle("Comparing Unweighted Social Index behaviour across time") + ylab(paste("Mean",names(TwitRetweets)[5])) +xlab("Period Number") +theme(legend.position = "none")
 ggsave("AllperiodsAllSymbols.png")
 ```
+
+Identify time series in all periods by metric
+```{r}
+
+.dots = setNames(dots, c("mean", "count"))
+dots <- list( ~length(unique(PeriodID)))
+
+x <- lapply(1:5, function(z) {
+  MetricList[[z]] %>% group_by(SYMBOL) %>% 
+    summarise_( . , .dots = setNames(dots, names(MetricList[z]) )) %>% ungroup
+    }
+)
+
+x2 <- full_join( x[[1]], x[[2]], by = "SYMBOL") %>% 
+  full_join( ., x[[3]], by = "SYMBOL") %>%
+  full_join( ., x[[4]], by = "SYMBOL") %>%
+  full_join( ., x[[5]], by = "SYMBOL")
+
+
+```
+
+
+Import symbol time series from Quandl
+```{r}
+setwd(DataFiles)
+AppleReturns <- read.csv("AppleReturns.csv") %>% 
+  left_join(.,read.csv("Marketindex.csv") ) %>% 
+  bind_cols(.,MetricList[[2]] %>% filter(SYMBOL == "AAPL") ) %>% 
+  rename(Return = Adj..Close, MI = Adj.Close, CSI = mean) %>%
+  select(-ClusterID, -PeriodID, -SYMBOL) %>% mutate_each(funs(scale), -Date) 
+
+AppleReturnsplt <- AppleReturns %>%  gather(key = Variable, value = Norm_Ret, -Date)
+
+setwd(GraphicsFiles)
+ggplot(AppleReturnsplt, aes(x = Date, y= Norm_Ret, group =(Variable), colour = Variable)) +geom_point()+geom_line() +ggtitle("Comparison of the CSI \n the MI and Returns for Apple") +
+  ylab("Normalised Values") +theme(axis.text.x = element_text(angle = 45))
+ggsave("ApplePlot.png")
+
+x <- AppleReturns %>% select(-Date) %>% as.matrix %>% rcorr
+
+```
+
 
 
 Structure graph for use in gephi with as much metadata as possible
