@@ -6,6 +6,7 @@ import os
 import Quandl as q
 import statsmodels.tsa.stattools as stat
 import statsmodels.api as sm
+from config import config as c
 
 
 def get_clustered_data(file_name):
@@ -33,7 +34,7 @@ def resample(ts, periods):
     return ts.resample(periods, how=cumret)
 
 
-def aug_dickey_fuller(ts, reg_type, alpha):
+def aug_dickey_fuller(ts, reg_type=c.df_reg_type, alpha=c.alpha):
     dft = stat.adfuller(ts, regression=reg_type, autolag="BIC", store=True, regresults=True)
     pvalue = dft[1]
     return pvalue <= alpha
@@ -76,11 +77,16 @@ def market_model(stock_ts, market_ts):
     r_t = t_plus_n_minus_1(stock_ts, 0)
     m_t = t_plus_n_minus_1(market_ts, 0)
 
-    dep_vars = np.concatenate((r_t.values,m_t.values), axis=1)
+    dep_vars = np.concatenate((r_t.values, m_t.values), axis=1)
     dep_vars = sm.add_constant(dep_vars)
     linreg = sm.OLS(r_t_plus_one.values, dep_vars)
 
     return linreg.fit()
+
+
+def cointegration(model):
+    dft = stat.adfuller(model.resid, regression=c.reg_type, autolag="BIC", store=True, regresults=True)
+    return dft[1]
 
 
 def sentiment_model(market_model, stock_ts, sentiment_ts):
