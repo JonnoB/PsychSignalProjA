@@ -5,7 +5,7 @@ date: "26 March 2016"
 output: html_document
 ---
 
-
+Load packages and set the Data loading and saving folders
 
 ```{r load_packages}
 packages <- c("dplyr", "tidyr", "ggplot2", "caret", "corrplot", "xtable", "magrittr", "zoo", "igraph", "rgexf", "MCL", "Hmisc", "gridExtra", "xtable", "lubridate")
@@ -19,6 +19,7 @@ GraphicsFiles <- file.path(basewd, "Graphics", "Milestone3")
 ```
 
 
+Load the Retweet data set and the symbology files.
 
 ```{r load_data}
 setwd(DataFiles)
@@ -29,7 +30,7 @@ setwd(GraphicsFiles)
 
 #Data Preparation
 
-
+Define the start and stop dates, create a grouping vector for the time series, cut the time series down to the dates of interest. 
 ```{r }
 startDate = "1/1/2011" %>% dmy
 endDate = "31/12/2015" %>% dmy
@@ -45,6 +46,8 @@ TwitRetweets %<>% mutate(TIMESTAMP_UTC = ymd_hms(TIMESTAMP_UTC)) %>%
 
 ```
 
+
+Create a vector of viable columns, that is columns that are at least 5/7 non- zero values 
 ```{r}
 #viable rows data
 viable <- colSums(TwitBull>0) / nrow(TwitBull) > 5/7
@@ -53,6 +56,9 @@ viable <- colSums(TwitBull>0) / nrow(TwitBull) > 5/7
 groupdata = data.frame(Months = seq(startDate, endDate, "months")) %>% 
   mutate(group =( 1+(1:nrow(.)))/2) %>% mutate(group = floor(group))
 ```
+
+
+The function creates a list of dataframes of symbol cluster membership for a specified metric. Each element of the list is a dataframe for a single time period. If no Metric is specified the function defaults to  "BULLISH_INTESNITY".
 
 ```{r}
 TwitMatList <-function(TweetDataRaw, Metric = "BULLISH_INTENSITY",groupdata){
@@ -104,7 +110,7 @@ TwitMatList <-function(TweetDataRaw, Metric = "BULLISH_INTENSITY",groupdata){
 ```
 
 
-Function: Aggregate list into unweighted time periods and combine into single dataframe
+Function: Aggregate list output of previous function into unweighted time periods and combine into single dataframe
 ```{r}
 Aggregator <- function(TwitMatList, Metric){
   TwitMatAgg<- lapply(1:length(TwitMatList), function(m) {
@@ -200,7 +206,7 @@ MNet
 
 
 
-Create a list of all time periods for all metrics to compare the number of clusters
+Create a list of all time periods for all metrics to compare the number of clusters created data frames are written to CSV files in the location specified by "DataFiles"
 ```{r}
 
 MetricList <- lapply(c(4:5,7:9), function(z){
@@ -239,7 +245,7 @@ ClusterPeriod <- do.call(cbind, x) %>% as.data.frame %>% mutate(PeriodID = 1:nro
 
 
 
-
+Create a data frame of graph statistics for each period
 ```{r}
 graphstats <- data.frame(matrix(NA, nrow = 30, ncol = 6))
 names(graphstats) = c("Period","Degree","Clustering", "Diameter", "BetweenessMean", "BetweennessMedian")
@@ -284,13 +290,5 @@ graphstat_metric %<>% rename(PeriodID = Period) %>%
 setwd(DataFiles)
 write.csv(graphstat_metric, "graphstat_metric.csv", row.names=FALSE)
 
-```
-
-
-
-```{r}
-#sink("Rpackages.bib")
-n <-sapply(names(sessionInfo()$otherPkgs), 
-    function(x) print(citation(x), style = "Bibtex"))
 ```
 
